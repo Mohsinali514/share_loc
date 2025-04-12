@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "859158819978",
+    "project_id": "education-app-c0558",
+    "storage_bucket": "education-app-c0558.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:859158819978:android:b25ae13e8b7759531fe973",
+        "android_client_info": {
+          "package_name": "com.example.new_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpMxYMC05QDCTmZnJb2WalDiGKgW4IUrU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

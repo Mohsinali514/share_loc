@@ -1,0 +1,2 @@
+/Users/syedmalikazmi/AndroidStudioProjects/share_loc/android/app/.cxx/Debug/y51341ud/armeabi-v7a/CMakeFiles/edit_cache.dir
+/Users/syedmalikazmi/AndroidStudioProjects/share_loc/android/app/.cxx/Debug/y51341ud/armeabi-v7a/CMakeFiles/rebuild_cache.dir
