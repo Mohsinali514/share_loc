@@ -60,10 +60,15 @@ class _DesignatedRoleScreenState extends State<DesignatedRoleScreen> {
           );
           final user = context.read<UserProvider>().user;
           final checkPhoto = user?.profilePic;
-          if (checkPhoto != null) {
+          if (checkPhoto == null) {
             Navigator.pushNamed(context, Constants.addPhotoScreen);
+          } else {
+            if (checkPhoto.isEmpty) {
+              Navigator.pushNamed(context, Constants.addPhotoScreen);
+            } else {
+              Navigator.pushNamed(context, Constants.permissionScreen);
+            }
           }
-          Navigator.pushNamed(context, Constants.permissionScreen);
         }
 
         if (state.updateCreatorRoleState.isFailure) {

@@ -9,9 +9,11 @@ import 'package:provider/provider.dart';
 import 'package:share_loc/core/common/providers/user_provider.dart';
 import 'package:share_loc/core/common/widgets/custom_dialog.dart';
 import 'package:share_loc/core/res/colours.dart';
+import 'package:share_loc/core/services/di.dart';
 import 'package:share_loc/core/utils/constants.dart';
 import 'package:share_loc/core/utils/map_utils.dart';
-import 'package:share_loc/features/homepage/presentation/widgets/custom_marker.dart';
+import 'package:share_loc/features/circle/data/models/circle_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomePageScreen extends StatefulWidget {
   const HomePageScreen({super.key});
@@ -24,53 +26,23 @@ class _HomePageScreenState extends State<HomePageScreen>
     with osm.OSMMixinObserver {
   final osm.MapController mapController = createMapController();
   final osm.OSMOption osmOptions = getOSMOptions();
-
+  final Location location = Location();
   StreamSubscription<LocationData>? locationSubscription;
   StreamSubscription<QuerySnapshot>? membersLocationSubscription;
-
-  String? currentCircleId;
-  List<String> memberIds = [];
 
   @override
   Future<void> mapIsReady(bool isReady) async {}
 
-  //osm.GeoPoint? currentLocation;
+  bool isSharingEnabled = false;
+  String? currentCircleId;
+  List<String> memberIds = [];
 
-  // Future<void> _addMarker({osm.GeoPoint? markerPoint}) async {
-  //   await Future.delayed(const Duration(milliseconds: 500));
-  //   final geoPoint = await mapController.myLocation();
-  //   await mapController.addMarker(
-  //     markerPoint ?? geoPoint,
-  //     markerIcon: Constants.myMarker,
-  //     angle: 3.14 / 3,
-  //   );
-  //   currentLocation = markerPoint ?? geoPoint;
-  // }
-
-  @override
-  void initState() {
-    super.initState();
-    mapController.addObserver(this);
-    fetchCurrentCircleAndMembers();
-    //startLocationUpdates();
-  }
-
-  @override
-  void dispose() {
-    mapController.removeObserver(this);
-    //locationSubscription?.cancel();
-    membersLocationSubscription?.cancel();
-    super.dispose();
-  }
-
-  // Current user live location
-  Future<void> startLocationUpdates() async {
-    final location = Location();
+  Future<void> permissionsCheck() async {
     var serviceEnabled = await location.serviceEnabled();
     if (!serviceEnabled) {
       serviceEnabled = await location.requestService();
+      // Case when the user does not enable location services
       if (!serviceEnabled) {
-        // Case when the user does not enable location services
         return showCustomDialog(
           context: context,
           title: 'Location not enabled',
@@ -83,8 +55,8 @@ class _HomePageScreenState extends State<HomePageScreen>
     var permissionGranted = await location.hasPermission();
     if (permissionGranted == PermissionStatus.denied) {
       permissionGranted = await location.requestPermission();
+      // Case when the user does not grant location permissions
       if (permissionGranted != PermissionStatus.granted) {
-        // Case when the user does not grant location permissions
         return showCustomDialog(
           context: context,
           title: 'Location permissions denied',
@@ -93,60 +65,9 @@ class _HomePageScreenState extends State<HomePageScreen>
         );
       }
     }
-
-    locationSubscription = location.onLocationChanged.listen(
-      updateUserLocation,
-      onError: (error) {
-        // Handle any errors that occur during location updates
-        print('Location update error: $error');
-        showCustomDialog(
-          context: context,
-          title: 'Location Update Error',
-          titleColor: Colors.red,
-          content: 'An error occurred while updating location: $error',
-        );
-      },
-    );
   }
 
-  osm.GeoPoint? oldUserMarker;
-  // Update currentLocation user data
-  Future<void> updateUserLocation(LocationData currentLocation) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final geoPoint = {
-      'lat': currentLocation.latitude,
-      'lon': currentLocation.longitude,
-    };
-
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-      'geoPoint': geoPoint,
-      'currentLocation':
-          '${currentLocation.latitude}, ${currentLocation.longitude}',
-      'locationSyncAt': DateTime.now().toIso8601String(),
-    });
-
-    final userGeoPoint = osm.GeoPoint(
-      latitude: currentLocation.latitude!,
-      longitude: currentLocation.longitude!,
-    );
-
-    // Remove old user marker
-    if (oldUserMarker != null) {
-      await mapController.removeMarker(oldUserMarker!);
-    }
-
-    // Add new user marker
-    await mapController.addMarker(
-      userGeoPoint,
-      markerIcon: Constants.myMarker,
-    );
-
-    oldUserMarker = userGeoPoint;
-  }
-
-  Future<void> fetchCurrentCircleAndMembers() async {
+  Future<void> fetchCurrentCircleMembers() async {
     final user = context.read<UserProvider>().user;
     if (user == null) return;
 
@@ -155,9 +76,12 @@ class _HomePageScreenState extends State<HomePageScreen>
         .doc(user.uid)
         .get();
 
-    currentCircleId = userDoc.data()?['currentCircle'].toString();
+    final userData = userDoc.data();
+    if (userData == null) return;
 
+    currentCircleId = userData['currentCircle'].toString();
     if (currentCircleId == null) return;
+
     final circleDoc = await FirebaseFirestore.instance
         .collection(Constants.dbCircle)
         .doc(currentCircleId)
@@ -168,9 +92,10 @@ class _HomePageScreenState extends State<HomePageScreen>
     setState(() {
       memberIds = members?.cast<String>() ?? [];
     });
-    listenToMemberLocations();
   }
 
+  Future<List<Map<String, dynamic>>>? members;
+  Future<List<Map<String, dynamic>>>? futureMembers;
   Future<List<Map<String, dynamic>>> fetchMemberDetails() async {
     final membersData = <Map<String, dynamic>>[];
 
@@ -188,33 +113,154 @@ class _HomePageScreenState extends State<HomePageScreen>
     return membersData;
   }
 
-  // Keep track of old member markers to remove them on each update
-  Map<String, osm.GeoPoint> oldMemberMarkers = {};
+  @override
+  void initState() {
+    permissionsCheck();
+    fetchCurrentCircleMembers().then((_) async {
+      members = fetchMemberDetails();
+      setState(() {
+        futureMembers = Future.value(members);
+      });
+    });
+    mapController.addObserver(this);
+    super.initState();
+  }
 
-  void listenToMemberLocations() {
-    if (currentCircleId == null) return;
+  // @override
+  // void didChangeDependencies() {
+  //   super.didChangeDependencies();
+  //   final user = context.read<UserProvider>().user;
+  //   if (user != null) {
+  //     final newCircleId = user.currentCircle;
+  //     if (newCircleId != currentCircleId) {
+  //       currentCircleId = newCircleId;
+  //       fetchCurrentCircleMembers().then((_) async {
+  //         members = fetchMemberDetails();
+  //         setState(() {
+  //           futureMembers = Future.value(members);
+  //         });
+  //       }); // Re-fetch members if circle changes
+  //     }
+  //   }
+  // }
+
+  @override
+  void dispose() {
+    mapController.removeObserver(this);
+    locationSubscription?.cancel();
+    membersLocationSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> checkLocationSharingEnabled() async {
+    final prefs = sl<SharedPreferences>();
+    final isSharing = prefs.getBool(Constants.kLocationSharingEnabled);
+    setState(() {
+      isSharingEnabled = isSharing ?? false;
+    });
+    if (isSharingEnabled) {
+      await myLocationUpdates();
+    } else {
+      await stopLocationUpdates();
+    }
+  }
+
+  // Current user location updates
+  Future<void> myLocationUpdates() async {
+    locationSubscription = location.onLocationChanged.listen(
+      updateUserLocation,
+    );
+  }
+
+  Future<void> stopLocationUpdates() async {
+    // Stop location stream
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Clear location data in Firestore
+    await FirebaseFirestore.instance
+        .collection(Constants.dbUsers)
+        .doc(user.uid)
+        .update({
+      'geoPoint': null,
+      'currentLocation': '',
+      'locationSyncAt': DateTime.now().toIso8601String(),
+    });
+    await locationSubscription?.cancel();
+  }
+
+  osm.GeoPoint? oldUserMarker;
+  Future<void> updateUserLocation(LocationData currentLocation) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final geoPoint = {
+      'lat': currentLocation.latitude,
+      'lon': currentLocation.longitude,
+    };
+
+    await FirebaseFirestore.instance
+        .collection(Constants.dbUsers)
+        .doc(user.uid)
+        .update({
+      'geoPoint': geoPoint,
+      'currentLocation':
+          '${currentLocation.latitude}, ${currentLocation.longitude}',
+      'locationSyncAt': DateTime.now().toIso8601String(),
+    });
+
+    //! Additional Marker
+    // final userGeoPoint = osm.GeoPoint(
+    //   latitude: currentLocation.latitude!,
+    //   longitude: currentLocation.longitude!,
+    // );
+
+    //! Remove old marker
+    // if (oldUserMarker != null) {
+    //   await mapController.removeMarker(oldUserMarker!);
+    // }
+
+    // // Add new user marker
+    // await mapController.addMarker(
+    //   userGeoPoint,
+    //   markerIcon: Constants.myMarker,
+    // );
+
+    // oldUserMarker = userGeoPoint;
+  }
+
+  Map<String, osm.GeoPoint?> oldMemberMarkers = {};
+  Future<void> listenToMemberLocations() async {
+    if (currentCircleId == null || memberIds.isEmpty) return;
+
+    final memberDataList = await fetchMemberDetails();
+    final memberDataMap = {
+      for (final member in memberDataList) member['uid']: member,
+    };
 
     membersLocationSubscription = FirebaseFirestore.instance
-        .collection('users')
+        .collection(Constants.dbUsers)
         .where(FieldPath.documentId, whereIn: memberIds)
         .snapshots()
         .listen((snapshot) async {
       final memberLocations = <osm.GeoPoint>[];
+
       for (final doc in snapshot.docs) {
         final uid = doc.id;
         final data = doc.data();
         final geoPoint = data['geoPoint'];
+        final currentLocation = data['currentLocation'];
+
         if (geoPoint != null) {
           final memberLocation = osm.GeoPoint(
             latitude: (geoPoint['lat'] as num).toDouble(),
             longitude: (geoPoint['lon'] as num).toDouble(),
           );
 
-          // Fetch member details from membersData
-          final memberData = await fetchMemberDetails();
-          final member =
-              memberData.firstWhere((m) => m['uid'] == uid, orElse: () => {});
-          final profilePictureUrl = member['profilePic'].toString();
+          // Extract member detail
+          final member = memberDataMap[uid] ?? {};
+          final profilePictureUrl = member['profilePic']?.toString();
 
           // Remove old marker
           if (oldMemberMarkers[uid] != null) {
@@ -222,38 +268,25 @@ class _HomePageScreenState extends State<HomePageScreen>
           }
 
           // Marker with profile picture
-          final markerIcon = await createNetworkMarkerIcon(profilePictureUrl);
+          // final markerIcon =
+          // await createNetworkMarkerIcon(profilePictureUrl);
           await mapController.addMarker(
             memberLocation,
-            markerIcon: markerIcon,
+            markerIcon: Constants.memberMarker,
           );
 
           oldMemberMarkers[uid] = memberLocation;
           memberLocations.add(memberLocation);
         }
       }
-
       if (memberLocations.isNotEmpty) {
-        // Average position of all members
-        final avgLat =
-            memberLocations.map((e) => e.latitude).reduce((a, b) => a + b) /
-                memberLocations.length;
-        final avgLon =
-            memberLocations.map((e) => e.longitude).reduce((a, b) => a + b) /
-                memberLocations.length;
-
-        final shiftedLat = avgLat + 0.002;
-        await mapController.setZoom(zoomLevel: 25);
-
-        await mapController.moveTo(
-          osm.GeoPoint(latitude: avgLat, longitude: avgLon),
-          animate: true,
-        );
+        // final bounds = osm.BoundingBox.fromGeoPoints(memberLocations);
+        // await mapController.zoomToBoundingBox(bounds);
       }
     });
   }
 
-  // Simple NetworkImage marker
+  // NetworkImage marker
   Future<osm.MarkerIcon> createNetworkMarkerIcon(String imageUrl) async {
     return osm.MarkerIcon(
       iconWidget: Image.network(
@@ -265,13 +298,6 @@ class _HomePageScreenState extends State<HomePageScreen>
     );
   }
 
-  // Custom painter marker
-  // Future<osm.MarkerIcon> createCustomMarkerIcon(String imageUrl) async {
-  //   return osm.MarkerIcon(
-  //     iconWidget: CustomMarkerWidget(imageUrl: imageUrl),
-  //   );
-  // }
-
   String selectedValue = 'Option 1';
   final List<String> dropdownItems = ['Option 1', 'Option 2', 'Option 3'];
 
@@ -280,20 +306,16 @@ class _HomePageScreenState extends State<HomePageScreen>
     return Scaffold(
       body: Stack(
         children: [
-          /// Fullscreen Map
           osm.OSMFlutter(
             controller: mapController,
             osmOption: osmOptions,
             onMapIsReady: (isReady) async {
-              // Wait until map is loaded
-              await Future.delayed(const Duration(milliseconds: 500));
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                // _addMarker();
-              });
+              await myLocationUpdates();
+              await listenToMemberLocations();
             },
           ),
 
-          /// Top Map Controls
+          // Top Map Controls
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -340,13 +362,22 @@ class _HomePageScreenState extends State<HomePageScreen>
                   _circleIconButton(
                     icon: Icons.chat,
                     onPressed: () {
-                      final circleId =
-                          context.read<UserProvider>().user?.currentCircle;
-                      Navigator.pushNamed(
-                        context,
-                        Constants.chatScreen,
-                        arguments: circleId,
-                      );
+                      if (currentCircleId != null) {
+                        Navigator.pushNamed(
+                          context,
+                          Constants.chatScreen,
+                          arguments: {
+                            'circleId': currentCircleId,
+                            'futureMembers': futureMembers,
+                          },
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Circle ID not loaded yet'),
+                          ),
+                        );
+                      }
                     },
                   ),
                 ],
@@ -354,7 +385,7 @@ class _HomePageScreenState extends State<HomePageScreen>
             ),
           ),
 
-          /// BottomSheet
+          // Sheet
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -376,7 +407,7 @@ class _HomePageScreenState extends State<HomePageScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  /// People & Places header
+                  // People & Places header
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -418,32 +449,37 @@ class _HomePageScreenState extends State<HomePageScreen>
 
                   const SizedBox(height: 16),
 
-                  /// Circle Members
+                  // Circle Members
                   Expanded(
                     child: FutureBuilder(
-                      future: fetchMemberDetails(),
+                      future: futureMembers,
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
+                        if (futureMembers == null) {
                           return const Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.mainColor,
-                            ),
+                            child: CircularProgressIndicator(),
                           );
                         }
 
-                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          return const Center(child: Text('No members found'));
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        } else if (snapshot.hasError) {
+                          return Text('Error: ${snapshot.error}');
+                        } else if (!snapshot.hasData ||
+                            snapshot.data!.isEmpty) {
+                          return const Text('No members found');
                         }
 
-                        // Format date helper function
+                        // Helper function
                         String formatLocationSyncAt(String? isoDateString) {
                           if (isoDateString == null || isoDateString.isEmpty)
                             return 'N/A';
                           try {
                             final dateTime = DateTime.parse(isoDateString);
-                            return DateFormat('h:mm a').format(dateTime);
-                            //d MMM yyyy,
+                            return DateFormat('d MMM yyyy, h:mm a')
+                                .format(dateTime);
                           } catch (e) {
                             return 'Invalid date';
                           }

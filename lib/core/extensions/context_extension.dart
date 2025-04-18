@@ -1,7 +1,7 @@
-import 'package:share_loc/core/common/providers/user_provider.dart';
-import 'package:share_loc/features/auth/domain/entities/user.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_loc/core/common/providers/user_provider.dart';
+import 'package:share_loc/features/auth/domain/entities/user.dart';
 
 extension ContextExt on BuildContext {
   ThemeData get theme {
@@ -17,6 +17,5 @@ extension ContextExt on BuildContext {
   double get height => size.height;
 
   UserProvider get userProvider => read<UserProvider>();
-
   LocalUser? get currentUser => userProvider.user;
 }

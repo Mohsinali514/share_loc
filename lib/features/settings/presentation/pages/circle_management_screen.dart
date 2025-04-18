@@ -137,7 +137,7 @@ class _CircleManagementScreenState extends State<CircleManagementScreen> {
                                           ?.uid;
                                       if (uid != null) {
                                         try {
-                                          // Step 1: Update Firestore
+                                          // Update Firestore
                                           await FirebaseFirestore.instance
                                               .collection('users')
                                               .doc(uid)
@@ -145,7 +145,7 @@ class _CircleManagementScreenState extends State<CircleManagementScreen> {
                                             'currentCircle': circle['id'],
                                           });
 
-                                          // Step 2: Fetch updated user data
+                                          // Fetch updated user data
                                           final userData =
                                               await sl<FirebaseFirestore>()
                                                   .collection(Constants.dbUsers)
@@ -154,15 +154,19 @@ class _CircleManagementScreenState extends State<CircleManagementScreen> {
 
                                           final data = userData.data();
                                           if (data != null) {
-                                            // Step 3: Parse and update UserProvider
+                                            // Update UserProvider
                                             final userLocal =
                                                 LocalUserModel.fromMap(data);
                                             context
                                                 .read<UserProvider>()
                                                 .initUser(userLocal);
-
-                                            // Step 4: Navigate
-                                            Navigator.pushNamed(
+                                            await Future.delayed(
+                                              const Duration(
+                                                milliseconds: 100,
+                                              ),
+                                            );
+                                            // Navigate
+                                            Navigator.pushReplacementNamed(
                                               context,
                                               Constants.homePage,
                                             );

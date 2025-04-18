@@ -14,8 +14,8 @@ class InvitationCodeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final circle =
         ModalRoute.of(context)!.settings.arguments! as LocalCircleModel;
-    final invitationCode = circle.invitationCode ?? 'HGF7V4'; // Default value
-    final circleId = circle.circleId; // Access the circleId
+    final invitationCode = circle.invitationCode ?? 'HGF7V4'; // Default
+    final circleId = circle.circleId;
 
     // Get the screen size
     final mediaQuery = MediaQuery.of(context);

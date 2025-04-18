@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'package:share_loc/core/utils/typedef.dart';
 import 'package:equatable/equatable.dart';
+import 'package:share_loc/core/utils/typedef.dart';
 
 enum DataState {
   initial,

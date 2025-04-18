@@ -52,7 +52,9 @@ class _SignInScreenState extends State<SignInScreen> {
             );
           } else if (state.signInState.isLoading) {
             CoreUtils.toastInfo(
-              msg: 'Signing in...',
+              msg: 'Signing in..',
+              backgroundColor: AppColors.mainColor,
+              gravity: ToastGravity.TOP,
             );
           } else if (state.signInState.isLoaded) {
             context
@@ -63,7 +65,10 @@ class _SignInScreenState extends State<SignInScreen> {
               gravity: ToastGravity.TOP,
               backgroundColor: Colors.green,
             );
-            Navigator.pushReplacementNamed(context, Constants.welcome);
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              Constants.welcome,
+              (Route<dynamic> route) => false,
+            );
           }
         },
         builder: (context, state) {

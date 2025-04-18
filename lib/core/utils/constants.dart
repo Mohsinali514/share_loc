@@ -6,6 +6,7 @@ class Constants {
   Constants._();
 
   static const kFirstTimeKey = 'First_time';
+  static const kLocationSharingEnabled = 'location_sharing_enabled';
 
   static const kDefaultAvatar = 'https://images.freeimages'
       '.com/fic/images/icons/573/must_have/256/user.png';

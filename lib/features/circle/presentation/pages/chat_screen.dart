@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:share_loc/core/common/providers/user_provider.dart';
-import 'package:share_loc/features/circle/data/models/message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:share_loc/core/common/providers/user_provider.dart';
+import 'package:share_loc/core/res/colours.dart';
+import 'package:share_loc/features/circle/data/models/message.dart';
+import 'package:share_loc/features/circle/presentation/widgets/message_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
-  // Or chatroom ID
-
   const ChatScreen({super.key});
 
   @override
@@ -16,28 +16,34 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   String? circleId;
+  late Future<List<Map<String, dynamic>>> futureMembers;
 
   @override
   void initState() {
     super.initState();
-    // In a real app, load initial messages here:
-    // _loadMessages();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)!.settings.arguments! as Map;
+      setState(() {
+        circleId = args['circleId'] as String;
+        futureMembers =
+            args['futureMembers'] as Future<List<Map<String, dynamic>>>;
+      });
+    });
   }
 
-  // Example function to simulate sending a message (replace with backend logic)
   void _sendMessage(String text) {
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || circleId == null) return;
+
     final user = context.read<UserProvider>().user;
     final newMessage = Message(
       senderId: user?.uid ?? '',
-      content: text,
+      content: text.trim(),
       timestamp: DateTime.now(),
       circleId: circleId,
       senderName: user?.fullName ?? '',
     );
 
-    setState(_textController.clear);
-
+    _textController.clear();
     _sendMessageToCircle(newMessage);
   }
 
@@ -49,17 +55,16 @@ class _ChatScreenState extends State<ChatScreen> {
           .collection('messages')
           .add(message.toJson());
     } catch (e) {
-      print('Error sending message: $e');
-      // Handle the error appropriately (e.g., show a snackbar)
+      debugPrint('Error sending message: $e');
     }
   }
 
-  Stream<List<Message>> getMessagesForCircle(String circleId) {
+  Stream<List<Message>> getMessagesStream() {
     return FirebaseFirestore.instance
         .collection('circle_chats')
         .doc(circleId)
         .collection('messages')
-        .orderBy('timestamp') // Order by time sent
+        .orderBy('timestamp')
         .snapshots()
         .map(
           (snapshot) =>
@@ -69,40 +74,42 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    circleId = ModalRoute.of(context)!.settings.arguments as String?;
+    if (circleId == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Chat for Circle')),
+      appBar: AppBar(title: const Text('Circle Chat')),
       body: Column(
         children: [
           Expanded(
             child: StreamBuilder<List<Message>>(
-              stream: getMessagesForCircle(circleId!),
+              stream: getMessagesStream(),
               builder: (context, snapshot) {
-                if (snapshot.hasData) {
-                  final messages = snapshot.data!;
-                  return ListView.builder(
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      final message = messages[index];
-                      return Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: ListTile(
-                          tileColor: Colors.grey[200],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          title: Text(message.content),
-                          subtitle: Text('From: ${message.senderName}'),
-                          // Customize message display further (e.g., bubbles, timestamps)
-                        ),
-                      );
-                    },
-                  );
-                } else if (snapshot.hasError) {
-                  return Text('Error: ${snapshot.error}');
-                } else {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                final messages = snapshot.data ?? [];
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(10),
+                  reverse: true,
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final message = messages[messages.length - 1 - index];
+                    return MessageBubble(
+                      message: message,
+                      isMe: message.senderId ==
+                          context.read<UserProvider>().user?.uid,
+                      futureMembers: futureMembers,
+                    );
+                  },
+                );
               },
             ),
           ),
@@ -114,20 +121,28 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildInputArea() {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        color: Colors.grey.shade100,
         child: Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _textController,
-                decoration:
-                    const InputDecoration(hintText: 'Type a message...'),
+                textInputAction: TextInputAction.send,
+                onSubmitted: _sendMessage,
+                decoration: const InputDecoration(
+                  hintText: 'Type a message...',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
               ),
             ),
+            const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.send),
               onPressed: () => _sendMessage(_textController.text),
+              color: AppColors.mainColor,
             ),
           ],
         ),

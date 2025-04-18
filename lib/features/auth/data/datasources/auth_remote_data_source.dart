@@ -1,15 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
 import 'package:share_loc/core/common/errors/exceptions.dart';
 import 'package:share_loc/core/enums/update_user.dart';
 import 'package:share_loc/core/utils/constants.dart';
 import 'package:share_loc/core/utils/typedef.dart';
 import 'package:share_loc/features/auth/data/models/user_model.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/material.dart';
 
 abstract class AuthRemoteDataSource {
   const AuthRemoteDataSource();
@@ -133,7 +132,7 @@ class AuthRemoteDataSrcImpl implements AuthRemoteDataSource {
       );
       if (userCred.user != null) {
         await userCred.user!.updateDisplayName(fullName);
-        await userCred.user!.updatePhotoURL(Constants.kDefaultAvatar);
+        // await userCred.user!.updatePhotoURL(Constants.kDefaultAvatar);
       }
 
       final user = _authClient.currentUser;
@@ -226,7 +225,6 @@ class AuthRemoteDataSrcImpl implements AuthRemoteDataSource {
             profilePic: user.photoURL ?? '',
             points: 0,
             currentLocation: '',
-            geoPoint: null,
             locationSyncAt: '',
             currentCircle: '',
           ).toMap(),

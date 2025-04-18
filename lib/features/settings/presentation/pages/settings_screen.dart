@@ -1,14 +1,14 @@
 import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:share_loc/core/common/providers/user_provider.dart';
 import 'package:share_loc/core/common/widgets/custom_dialog.dart';
 import 'package:share_loc/core/common/widgets/custom_header.dart';
+import 'package:share_loc/core/extensions/context_extension.dart';
 import 'package:share_loc/core/res/colours.dart';
 import 'package:share_loc/core/res/media_res.dart';
+import 'package:share_loc/core/services/di.dart';
 import 'package:share_loc/core/utils/constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,12 +18,31 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool isSharingEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    loadLocationSharingPreference();
+  }
+
+  Future<void> loadLocationSharingPreference() async {
+    final prefs = sl<SharedPreferences>();
+    final sharing = prefs.getBool(Constants.kLocationSharingEnabled) ?? false;
+    setState(() {
+      isSharingEnabled = sharing;
+    });
+    print('Testing booloean value: $isSharingEnabled');
+  }
+
+  Future<void> toggleLocationSharing(bool value) async {
+    final prefs = sl<SharedPreferences>();
+    await prefs.setBool(Constants.kLocationSharingEnabled, value);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final width = mediaQuery.size.width;
-    final height = mediaQuery.size.height;
-    final user = context.read<UserProvider>().user;
+    final user = context.currentUser;
 
     return Scaffold(
       backgroundColor: AppColors.mainColor,
@@ -38,10 +57,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             alignment: Alignment.bottomCenter,
             child: Container(
               padding: EdgeInsets.symmetric(
-                horizontal: width * 0.05,
-                vertical: height * 0.02,
+                horizontal: context.width * 0.05,
+                vertical: context.height * 0.02,
               ),
-              height: height * 0.83,
+              height: context.height * 0.83,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -53,7 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Row(
                       children: [
                         CircleAvatar(
-                          radius: width * 0.08,
+                          radius: context.width * 0.08,
                           backgroundImage: (user?.profilePic != null &&
                                   user!.profilePic!.isNotEmpty)
                               ? NetworkImage(user.profilePic!)
@@ -61,7 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   'assets/images/default_avatar.png',
                                 ) as ImageProvider,
                         ),
-                        SizedBox(width: width * 0.04),
+                        SizedBox(width: context.width * 0.04),
                         Expanded(
                           child: Text(
                             (user?.fullName != null &&
@@ -69,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ? user.fullName
                                 : 'N/A',
                             style: TextStyle(
-                              fontSize: width * 0.05,
+                              fontSize: context.width * 0.05,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -79,19 +98,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           inactiveThumbColor: Colors.white,
                           inactiveTrackColor: AppColors.inactiveTrackColor,
                           activeTrackColor: AppColors.mainColor,
-                          value: true,
-                          onChanged: (val) {
-                            // Handle switch change
+                          value: isSharingEnabled,
+                          onChanged: (value) {
+                            setState(() {
+                              isSharingEnabled = value;
+                            });
+                            toggleLocationSharing(value);
                           },
                         ),
                       ],
                     ),
-                    SizedBox(height: height * 0.03),
+                    SizedBox(height: context.height * 0.03),
 
                     /// General Settings
                     sectionTitle(
                       'General Settings',
-                      width,
+                      context.width,
                     ),
                     settingTile(
                       Icons.notifications,
@@ -115,10 +137,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'Location Sharing',
                       circleColor: AppColors.mainColor,
                     ),
-                    SizedBox(height: height * 0.03),
+                    SizedBox(height: context.height * 0.03),
 
                     /// Universal Settings
-                    sectionTitle('Universal Settings', width),
+                    sectionTitle('Universal Settings', context.width),
 
                     settingTile(
                       Icons.account_circle,

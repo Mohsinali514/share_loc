@@ -1,3 +1,4 @@
+import 'package:share_loc/core/common/providers/user_provider.dart';
 import 'package:share_loc/core/common/widgets/btn.dart';
 import 'package:share_loc/core/common/widgets/custom_header.dart';
 import 'package:share_loc/core/res/colours.dart';
@@ -64,10 +65,12 @@ class _JoinOrCreateCircleScreenState extends State<JoinOrCreateCircleScreen> {
                       context,
                       'Successfully joined the circle!',
                     );
-                    Navigator.pushNamed(
-                      context,
-                      Constants.addPhotoScreen,
-                    );
+                    final user = context.read<UserProvider>().user;
+                    final checkPhoto = user?.profilePic;
+                    if (checkPhoto != null) {
+                      Navigator.pushNamed(context, Constants.addPhotoScreen);
+                    }
+                    Navigator.pushNamed(context, Constants.permissionScreen);
                   } else if (state.joinCircleState.isFailure) {
                     CoreUtils.showSnackBar(
                       context,
